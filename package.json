@@ -1,0 +1,7 @@
+{
+    "name": "air105-uploader",
+    "description": "Uploader tool for AIR105 MCU (Compatible with MH190x series SCPUs)",
+    "url": "https://github.com/racerxdl/framework-megahunt",
+    "system": "*",
+    "version": "1.0.0"
+}
