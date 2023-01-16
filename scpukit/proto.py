@@ -177,10 +177,10 @@ class Uploader:
         return packet
 
 
-    def receive_packet(self, timeout=0.1):
+    def receive_packet(self, timeout=1):
         '''
         Receives a packet from the device
-        timeout: time to wait for packet to arrive, defaults to 0.1
+        timeout: time to wait for packet to arrive, defaults to 1
         '''
         timestart = time.time()
         while self.port.inWaiting() < 6:
