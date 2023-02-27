@@ -162,8 +162,8 @@ class CRC():
                 self.crc_method = self.fast_crc32
                 self.crc32_table = self.calc_crc32_lut(self.poly)
         except KeyError:
-            msg = "Invalid CRC configuration '{}'".format(conf)
-            raise Exception(msg)
+            msg = "Invalid CRC configuration '{}'".format(config)
+            raise ValueError(msg)
 
         return True
 
@@ -197,7 +197,7 @@ class CRC():
 
         except KeyError:
             msg = "Could not set CRC configuration '{}'".format(crc_name)
-            raise Exception(msg)
+            raise ValueError(msg)
 
         return True
 

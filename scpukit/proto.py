@@ -30,7 +30,7 @@ class Uploader:
         self.offset = offset
 
         if signKey:
-            print(">>> Loading signature private key from {}".format(signKey))
+            print(f">>> Loading signature private key from {signKey}")
             with open(signKey, "rb") as f:
                 privateData = f.read()
             self.rsa = RSA.import_key(privateData)
@@ -39,7 +39,7 @@ class Uploader:
             self.rsa = NULL_KEY
 
         self.port = serial.Serial(port, baudrate=baudrate, timeout=0.1)
-        print(">>> Port: {}".format(self.port.name))
+        print(f">>> Port: {self.port.name}")
 
     def close(self):
         '''
@@ -61,10 +61,10 @@ class Uploader:
         self.port.write(pkt)
         cmd, data = self.receive_packet()
         if cmd != PacketType.Ack:
-            raise("Error sending header: {}".format(binascii.hexlify(data)))
+            raise ValueError(f"Error sending header: {binascii.hexlify(data)}")
 
         if data[0] == ord(')'):
-            raise("Received error from header: {}".format(data))
+            raise ValueError(f"Received error from header: {data}")
 
         print(">>> Erasing flash memory")
         sectorsToErase = (len(firmwareData) >> 12) + 2
@@ -101,7 +101,7 @@ class Uploader:
             self.port.write(pkt)
             cmd, _ = self.receive_packet(1) # Flash erase is slow and needs more time
             if cmd != False and cmd != PacketType.Ack:
-                raise("error erasing flash")
+                raise ValueError("error erasing flash")
 
     def write_chunk(self, offset, data):
         '''
@@ -109,14 +109,14 @@ class Uploader:
         offset: offset in memory to write to
         data: data to write
         '''
-        print(">>> Writing @0x{:04X}".format(offset))
+        print(f">>> Writing @0x{offset:04X}")
         payload = struct.pack("<I", offset)
         payload += data
         pkt = self.make_packet(PacketType.FWData, payload)
         self.port.write(pkt)
         cmd, data = self.receive_packet()
         if cmd != PacketType.Ack or data[0] == ord(')'):
-            raise("Error sending chunk: {}".format(data))
+            raise ValueError(f"Error sending chunk: {data}")
 
     def reset_device(self):
         '''
@@ -137,20 +137,25 @@ class Uploader:
         self.port.read_all()
         time.sleep(0.1)
         self.port.rts = 0
+        start_time = time.time()
 
         while True:
             self.port.write(b"\xF8"*64)
-            cmd, data = self.receive_packet()
+            self.port.flushOutput()
+            cmd, data = self.receive_packet(0.1) # timeout here needs to be lower because this actually resets the IC
             if cmd:
                 if cmd == PacketType.ChipSN:
                     chipsn = PacketChipSN(data)
                     print(">>> Received ChipSN Packet")
-                    print(">>>  Boot Version: {}".format(chipsn.boot_version))
-                    print(">>>  ChipID: {}".format(chipsn.chip_id))
-                    print(">>>  ROM Version: {}".format(chipsn.rom_version))
-                    print(">>>  Series: {} ({})".format(chipsn.chip_series, chipsn.chip_name_index))
-                    print(">>>  Serial: {}".format(chipsn.serial_number_bytes))
+                    print(f">>>  Boot Version: {chipsn.boot_version}")
+                    print(f">>>  ChipID: {chipsn.chip_id}")
+                    print(f">>>  ROM Version: {chipsn.rom_version}")
+                    print(f">>>  Series: {chipsn.chip_series} ({chipsn.chip_name_index})")
+                    print(f">>>  Serial: {chipsn.serial_number_bytes}")
                     break
+
+            if time.time() - start_time > 10:
+                raise Exception("timeout waiting for bootloader")
 
     def boot_stage2(self):
         '''
@@ -159,9 +164,10 @@ class Uploader:
         '''
         print(">>> Initializing stage2")
         self.port.write(b"\x7C"*16)
+        self.port.flushOutput()
         cmd, _ = self.receive_packet()
         if cmd != PacketType.DeviceSN:
-            raise Exception("Cannot connect, received wrong command {:02X}".format(cmd))
+            raise ValueError(f"Cannot connect, received wrong command {cmd:02X}")
 
 
     def make_packet(self, cmd: PacketType, payload):
@@ -185,7 +191,7 @@ class Uploader:
         timestart = time.time()
         while self.port.inWaiting() < 6:
             if time.time() - timestart > timeout:
-                return False, False
+                return False, b""
         data = self.port.read(6)
         if len(data) < 6:
             return False, False
@@ -214,6 +220,6 @@ class Uploader:
         expcrc = struct.unpack("<H", data[len(data)-2:])[0]
         if gotcrc == expcrc:
             return PacketType(data[1]), data[4:len(data)-2]
-        print("Invalid packet CRC. Expected {} got {}".format(gotcrc, expcrc))
+        print(f"Invalid packet CRC. Expected {gotcrc} got {expcrc}")
         return False, False
 

@@ -58,18 +58,18 @@ class Packet:
     @staticmethod
     def decode(data):
         if data[0] != 0x02:
-            raise Exception("Invalid start of packet")
+            raise ValueError("Invalid start of packet")
         pkt_type = data[1]
         size = struct.unpack("<H", data[2:3])[0]
         if len(data) != (size - 6):
-            raise Exception("Not enough data")
+            raise ValueError("Not enough data")
 
         payload = data[4:len(data)-6]
         c16 = CRC()
         c16.set_config_by_name('CRC-16/CCITT-FALSE')
         crc = struct.pack("<H", c16.compute(data[:len(data)-2]))
         if crc != data[len(data)-2:]:
-            raise Exception("Invalid CRC")
+            raise ValueError("Invalid CRC")
         return Packet(pkt_type, payload)
 
     @classmethod
@@ -259,4 +259,4 @@ class PacketEraseFlash:
         return struct.pack("<III", self.address, self.sectors, self.sector_size)
 
     def __str__(self) -> str:
-        return "PacketEraseFlash(address={:08X}, sectors={}, sector_size={})".format(self.address, self.sectors, self.sector_size)
+        return f"PacketEraseFlash(address={self.address:08X}, sectors={self.sectors}, sector_size={self.sector_size})"
