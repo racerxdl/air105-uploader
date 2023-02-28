@@ -15,10 +15,10 @@ port = sys.argv[1]
 filename = sys.argv[2]
 
 if len(sys.argv) >= 4:
-    offset = int(sys.argv[4], 16)
+    offset = int(sys.argv[3], 16)
 
 if len(sys.argv) >= 5:
-    rsaKeyFile = sys.argv[5]
+    rsaKeyFile = sys.argv[4]
 
 uploader = Uploader(port, 115200, offset, rsaKeyFile)
 
