@@ -21,6 +21,7 @@ class PacketType(IntEnum):
     ChipUpdateFix = 0x15
     BackPatch = 0x17
     WriteFlashOption = 0x18
+    Unknown = 0x19
     FWHeader = 0x20
     FWData = 0x21
     EraserFlash = 0x22
@@ -47,7 +48,6 @@ class PacketType(IntEnum):
     FlashIDResult = 0xa3
     HANDSHAKE1 = 0xf8
     HANDSHAKE2 = 0x7c
-    CBootHANDSHAKE = 0x80
 
 
 class Packet:
@@ -99,7 +99,7 @@ class PacketChipSN:
         self.chip_name_index = "unknown"
         self.chip_timeout = 0
         self.chip_key_info = 0
-        self.chip_id = ""
+        self.chip_id = "unknown"
 
         self.stage = data[0]
         self.serial_number_bytes = binascii.hexlify(data[1:][:4]).upper()
@@ -189,6 +189,13 @@ class PacketChipSN:
             return "Unknown"
         return "V{}.{}.{}".format(((self.rom_version_value & 0xFF0000) >> 16) - 48, ((self.rom_version_value & 0xFF00) >> 8) - 48, (self.rom_version_value & 0xFF)-48)
 
+    @property
+    def chip_serial_number(self):
+        hex = self.serial_number_bytes.decode("ascii")
+        try:
+            return binascii.unhexlify(hex).decode("ascii")
+        except:
+            return hex
 
 class PacketFirmware:
     Start = 0x1001000

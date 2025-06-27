@@ -52,10 +52,19 @@ class Uploader:
         Uploads firmware to device
         firmwareData: bytearray containing firmware data
         '''
+        # Pad to 4096 sector
+        if len(firmwareData) % 4096 != 0:
+            padding = bytearray(4096 - (len(firmwareData) % 4096))
+            firmwareData += padding
+            print(f">>> Padding firmware to {len(firmwareData)} bytes")
         firmwarePacket = PacketFirmware(data=firmwareData, startAddress=self.offset, rsa=self.rsa)
         self.reset_device()
         self.start_boot()
         self.boot_stage2()
+        flashId, manufacturer, flashSize, flashType = self.get_flash_id()
+        print(f">>>  Flash ID: {flashId:06X} ({manufacturer:02X})")
+        print(f">>>  Flash Size: {flashSize} bytes")
+        print(f">>>  Flash Type: {flashType:02X}")
 
         pkt = self.make_packet(PacketType.FWHeader, firmwarePacket.header_as_bytes)
         self.port.write(pkt)
@@ -102,6 +111,7 @@ class Uploader:
             cmd, _ = self.receive_packet(1) # Flash erase is slow and needs more time
             if cmd != False and cmd != PacketType.Ack:
                 raise ValueError("error erasing flash")
+        time.sleep(0.2)
 
     def write_chunk(self, offset, data):
         '''
@@ -110,13 +120,20 @@ class Uploader:
         data: data to write
         '''
         print(f">>> Writing @0x{offset:04X}")
-        payload = struct.pack("<I", offset)
-        payload += data
-        pkt = self.make_packet(PacketType.FWData, payload)
-        self.port.write(pkt)
-        cmd, data = self.receive_packet()
-        if cmd != PacketType.Ack or data[0] == ord(')'):
-            raise ValueError(f"Error sending chunk: {data}")
+        retries = 0
+        while retries < 5:
+            payload = struct.pack("<I", offset)
+            payload += data
+            pkt = self.make_packet(PacketType.FWData, payload)
+            self.port.write(pkt)
+            cmd, data = self.receive_packet()
+            if cmd != PacketType.Ack or data[0] == ord(')'):
+                retries += 1
+                print(f">>> Error writing chunk, retrying {retries}/5 Received : {cmd:02X} Data: {data}")
+                time.sleep(0.1)
+                continue
+            return
+        raise ValueError("Error writing chunk, too many retries")
 
     def reset_device(self):
         '''
@@ -151,8 +168,9 @@ class Uploader:
                     print(f">>>  ChipID: {chipsn.chip_id}")
                     print(f">>>  ROM Version: {chipsn.rom_version}")
                     print(f">>>  Series: {chipsn.chip_series} ({chipsn.chip_name_index})")
-                    print(f">>>  Serial: {chipsn.serial_number_bytes}")
+                    print(f">>>  Serial: {chipsn.chip_serial_number} ({chipsn.serial_number_bytes})")
                     break
+
 
             if time.time() - start_time > 10:
                 raise Exception("timeout waiting for bootloader")
@@ -169,6 +187,24 @@ class Uploader:
         if cmd != PacketType.DeviceSN:
             raise ValueError(f"Cannot connect, received wrong command {cmd:02X}")
 
+    def get_flash_id(self):
+        '''
+        Gets the flash ID from the device
+        Returns a tuple with the flash ID and the flash size
+        '''
+        pkt = self.make_packet(PacketType.FlashID, b"")
+        self.port.write(pkt)
+        cmd, data = self.receive_packet()
+        if cmd != PacketType.FlashIDResult:
+            raise ValueError(f"Error getting flash ID: {data}")
+
+        # 3 bytes
+        flashId = struct.unpack("<I", data[:3] + b"\x00")[0]
+        manufacturer = (flashId >> 16) & 0xFF
+        flashSize = flashId & 0xFF
+        flashSize = 1 << flashSize if flashSize >= 0x13 and flashSize < 0x20 else flashSize
+        flashType =  (flashId >> 8) & 0xFF
+        return (flashId, manufacturer, flashSize, flashType)
 
     def make_packet(self, cmd: PacketType, payload):
         '''
